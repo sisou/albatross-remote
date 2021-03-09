@@ -53,13 +53,28 @@ if (argv.user) {
 function jsonRpcFetch(method, ...params) {
     return new Promise((resolve, fail) => {
         while (params.length > 0 && typeof params[params.length - 1] === 'undefined') params.pop();
-        const jsonrpc = JSON.stringify({
+        params = params.map((param) => {
+            switch (typeof param) {
+                case 'number': return param.toString();
+                case 'string':
+                    if (param === 'true') return true;
+                    if (param === 'false') return false;
+                    return param;
+                default:
+                    return param;
+            }
+        });
+        console.log('Params:', params);
+        const body = JSON.stringify({
             jsonrpc: '2.0',
             id: 42,
             method: method,
             params: params
         });
-        const headers = {'Content-Length': jsonrpc.length};
+        const headers = {
+            'Content-Type': 'application/json',
+            'Content-Length': body.length,
+        };
         if (user && password) {
             headers['Authorization'] = `Basic ${btoa(`${user}:${password}`)}`;
         }
@@ -89,7 +104,7 @@ function jsonRpcFetch(method, ...params) {
                 try {
                     const parse = JSON.parse(rawData);
                     if (parse.error) {
-                        fail(parse.error.message);
+                        fail(`${parse.error.message} - ${parse.error.data}`);
                     } else {
                         resolve(parse.result);
                     }
@@ -99,7 +114,7 @@ function jsonRpcFetch(method, ...params) {
             });
         });
         req.on('error', fail);
-        req.write(jsonrpc);
+        req.write(body);
         req.end();
     });
 }
@@ -227,13 +242,13 @@ function blockAmountFormat(blocks) {
 }
 
 async function displayInfoHeader(width = 0) {
-    const genesisBlock = await jsonRpcFetch('getBlockByNumber', 0);
+    const genesisBlock = await jsonRpcFetch('blockByNumber', 0, false);
     const blockNumber = await jsonRpcFetch('blockNumber');
-    const peerCount = await jsonRpcFetch('peerCount');
-    const consensus = await jsonRpcFetch('consensus');
+    const peerCount = '?'; // await jsonRpcFetch('peerCount');
+    const consensus = '?'; // await jsonRpcFetch('consensus');
     const {color, chain} = genesisInfo(genesisBlock.hash);
     //const state = syncing ? `Syncing. [${Math.round(100 * (syncing.currentBlock - syncing.startingBlock) / (syncing.highestBlock - syncing.startingBlock))}%]` : 'On sync.';
-    const state = consensus === 'established' ? 'Consensus established.' : consensus === 'syncing' ? 'Syncing...' : consensus === 'lost' ? 'Consensus lost.' : 'Unknown state.';
+    const state = 'Consensus ???'; // consensus === 'established' ? 'Consensus established.' : consensus === 'syncing' ? 'Syncing...' : consensus === 'lost' ? 'Consensus lost.' : 'Unknown state.';
     const descr = chalk`${peerCount} peers | ⛃ ${blockNumber} | ${state}`;
     if (chain !== 'main') {
         const chainPrefix = chalk.keyword('black').bgKeyword(color)(` ${chain} `) + ' ';
@@ -256,35 +271,40 @@ function displayBlock(block, hashOrNumber) {
         return;
     }
     console.log(chalk`Block {bold ${block.hash}}:`);
+    console.log('-----------------------------------------------------------------------');
     console.log(`Number      | ${block.blockNumber}`);
     console.log(`Type        | ${block.type === 'macro' ? chalk`{bold ${block.type}}` : block.type}`);
     console.log(`Parent-Hash | ${block.parentHash}`);
     console.log(`Timestamp   | ${new Date(block.timestamp).toString()}`);
     console.log(`Epoch       | ${block.epoch}`);
+    console.log(`Batch       | ${block.batch}`);
     console.log(`View        | ${block.viewNumber}`);
+    console.log('-----------------------------------------------------------------------');
     if (block.type === 'micro') {
-        console.log('-------------');
-        console.log(`Txs         | ${block.transactions.length} transaction${block.transactions.length !== 1 ? 's' : ''}`);
-        console.log(`Producer    | ${block.producer.rewardAddress} (slot ${block.producer.index})`);
-        console.log(`Data        | ${block.extraData || null}`);
+        console.log(`Txs Count   | ${block.transactions ? `${block.transactions.length} transaction${block.transactions.length !== 1 ? 's' : ''}` : 'n/a - Pass `true` as a second parameter to receive transaction information'}`);
+        console.log(`Producer    | ${block.producer.rewardAddress} (slot ${block.producer.slotNumber})`);
+        console.log(`Data        | ${block.extraData || block.extra_data || null}`);
     }
     if (block.type === 'macro') {
-        console.log('-------------');
-        console.log(`Votes       | ${block.justification.votes} (${Math.round(block.justification.votes / 342 * 100)}%)`);
+        console.log(`Macro-Type  | ${(block.isElectionBlock || block.is_election_block) ? 'Election' : 'Checkpoint'}`);
+        console.log(`Votes       | ${block.blockNumber > 0 ? `${block.justification.votes} (${Math.round(block.justification.votes / 342 * 100)}%)` : 'Genesis'}`);
     }
 }
 
-async function displayAccount(account, name, head) {
+async function displayAccount(account, address, head) {
     if (!account) {
-        console.log(chalk`Account {bold ${name}} not found.`);
+        console.log(chalk`Account {bold ${address}} not found.`);
     }
-    if (!head && account.type !== 0 /* BASIC */) {
-        head = await jsonRpcFetch('getBlockByNumber', 'latest');
+    const type = 'Basic' in account ? 0 : 'Vesting' in account ? 1 : 'HTLC';
+    account = account[Object.keys(account)[0]];
+
+    if (!head && type !== 0 /* BASIC */) {
+        head = await jsonRpcFetch('blockByNumber', 'latest', false);
     }
-    console.log(chalk`Account {bold ${account.address}}:`);
-    console.log(`Type          | ${accountTypeName(account.type)}`);
+    console.log(chalk`Account {bold ${address}}:`);
+    console.log(`Type          | ${accountTypeName(type)}`);
     console.log(`Balance       | ${nimValueFormat(account.balance)}`);
-    if (account.type === 1 /* VESTING */) {
+    if (type === 1 /* VESTING */) {
         console.log(`Vested amount | ${nimValueFormat(account.vestingTotalAmount)}`);
         console.log(`Vesting start | ${blockNumberFormat(account.vestingStart, head)}`);
         console.log(`Vesting step  | ${nimValueFormat(account.vestingStepAmount)} every ${blockAmountFormat(account.vestingStepBlocks)}`);
@@ -296,7 +316,7 @@ async function displayAccount(account, name, head) {
         } else {
             console.log(chalk`Next vesting  | {italic Fully vested}`);
         }
-    } else if (account.type === 2 /* HTLC */) {
+    } else if (type === 2 /* HTLC */) {
         console.log(`Sender        | ${account.senderAddress}`);
         console.log(`Recipient     | ${account.recipientAddress}`);
         console.log(`Locked amount | ${nimValueFormat(account.totalAmount)}`);
@@ -316,7 +336,7 @@ async function displayTransaction(transaction, hashOrNumber, index, beforeSend) 
         return;
     }
     let block = null;
-    if (transaction.blockHash) block = await jsonRpcFetch('getBlockByHash', transaction.blockHash);
+    if (transaction.blockHash) block = await jsonRpcFetch('blockByHash', transaction.blockHash);
     if (!beforeSend) {
         console.log(chalk`Transaction {bold ${transaction.transactionHash}}:`);
     } else {
@@ -396,9 +416,6 @@ async function action(args, rl) {
             return;
         }
         case 'account': {
-            console.error('getAccount not yet supported in core-rs-albatross RPC');
-            return;
-
             if (!rl && !argv.silent) {
                 await displayInfoHeader(81);
             }
@@ -410,9 +427,6 @@ async function action(args, rl) {
             return;
         }
         case 'account.json': {
-            console.error('getAccount not yet supported in core-rs-albatross RPC');
-            return;
-
             if (args.length === 2) {
                 console.log(JSON.stringify(await jsonRpcFetch('getAccount', args[1])));
                 return;
@@ -429,12 +443,12 @@ async function action(args, rl) {
                 // Ask for options
                 args[1] = (await new Promise(resolve => { rl.question('Block hash or number? (latest)', resolve); })) || 'latest';
             }
-            if (args.length === 2) {
+            if (args.length === 2 || args.length === 3) {
                 if (args[1].length === 64 || args[1].length === 44) {
-                    displayBlock(await jsonRpcFetch('getBlockByHash', args[1]), args[1]);
+                    displayBlock(await jsonRpcFetch('blockByHash', args[1], args[2] || false), args[1]);
                     return;
                 } else if (args[1] === 'latest' || /^(latest-)?[0-9]*$/.test(args[1])) {
-                    displayBlock(await jsonRpcFetch('getBlockByNumber', args[1]), args[1]);
+                    displayBlock(await jsonRpcFetch('blockByNumber', args[1], args[2] || false), args[1]);
                     return;
                 }
             }
@@ -442,12 +456,12 @@ async function action(args, rl) {
             return;
         }
         case 'block.raw': {
-            if (args.length === 2) {
+            if (args.length === 2 || args.length === 3) {
                 if (args[1].length === 64 || args[1].length === 44) {
-                    console.dir(await jsonRpcFetch('getBlockByHash', args[1]), args[1]);
+                    console.dir(await jsonRpcFetch('blockByHash', args[1], args[2] || false), args[1]);
                     return;
                 } else if (args[1] === 'latest' || /^(latest-)?[0-9]*$/.test(args[1])) {
-                    console.dir(await jsonRpcFetch('getBlockByNumber', args[1]), args[1]);
+                    console.dir(await jsonRpcFetch('blockByNumber', args[1], args[2] || false), args[1]);
                     return;
                 }
             }
@@ -455,12 +469,12 @@ async function action(args, rl) {
             return;
         }
         case 'block.json': {
-            if (args.length === 2) {
+            if (args.length === 2 || args.length === 3) {
                 if (args[1].length === 64 || args[1].length === 44) {
-                    console.log(JSON.stringify(await jsonRpcFetch('getBlockByHash', args[1])));
+                    console.log(JSON.stringify(await jsonRpcFetch('blockByHash', args[1], args[2] || false)));
                     return;
                 } else if (args[1] === 'latest' || /^(latest-)?[0-9]*$/.test(args[1])) {
-                    console.log(JSON.stringify(await jsonRpcFetch('getBlockByNumber', args[1])));
+                    console.log(JSON.stringify(await jsonRpcFetch('blockByNumber', args[1], args[2] || false)));
                     return;
                 }
             }
@@ -479,16 +493,17 @@ async function action(args, rl) {
             if (args.length === 2) {
                 await displayTransaction(await jsonRpcFetch('getTransactionByHash', args[1]), args[1]);
                 return;
-            } else if (args.length === 3) {
-                if (args[1].length === 64 || args[1].length === 44) {
-                    await displayTransaction(await jsonRpcFetch('getTransactionByBlockHashAndIndex', args[1], args[2]), args[1], args[2]);
-                    return;
-                } else if (args[1] === 'latest' || /^(latest-)?[0-9]*$/.test(args[1])) {
-                    await displayTransaction(await jsonRpcFetch('getTransactionByBlockNumberAndIndex', args[1], args[2]), args[1], args[2]);
-                    return;
-                }
+            // } else if (args.length === 3) {
+            //     if (args[1].length === 64 || args[1].length === 44) {
+            //         await displayTransaction(await jsonRpcFetch('getTransactionByBlockHashAndIndex', args[1], args[2]), args[1], args[2]);
+            //         return;
+            //     } else if (args[1] === 'latest' || /^(latest-)?[0-9]*$/.test(args[1])) {
+            //         await displayTransaction(await jsonRpcFetch('getTransactionByBlockNumberAndIndex', args[1], args[2]), args[1], args[2]);
+            //         return;
+            //     }
             }
-            console.error('Specify transaction hash or block identifier (block number, block hash or \'latest\') and transaction index');
+            console.error('Specify transaction hash');
+            // console.error('Specify transaction hash or block identifier (block number, block hash or \'latest\') and transaction index');
             return;
         }
         case 'transaction.json': {
@@ -830,7 +845,7 @@ async function action(args, rl) {
             try {
                 await displayInfoHeader(43);
             } catch (e) {
-                console.log('Client not running.');
+                console.error(e);
             }
             console.log('Use `help` command for usage instructions.');
             return;
@@ -839,7 +854,7 @@ async function action(args, rl) {
             try {
                 await displayInfoHeader(79);
             } catch (e) {
-                console.log('Client not running.');
+                console.error(e);
             }
             return;
         }
@@ -914,18 +929,21 @@ friendly address format, hex or base64 encoded. Blocks can be specified by hash
 in hex or base64 format or by the height on the main chain. Transactions are
 understood in hex or base64 format of their hash.`);
             return;
+        case 'raw':
+            // args = args.map(arg => {
+            //     if (parseInt(arg, 10).toString() === arg) {
+            //         return parseInt(arg, 10);
+            //     } else {
+            //         return arg;
+            //     }
+            // });
+            args.shift(); // Remove 'raw' from the front
+            console.dir(await jsonRpcFetch(...args), {depth: Infinity});
+            return;
         default:
             if (rl) {
-                console.log('Unknown command. Use `help` command for usage instructions.');
-                console.log('');
-                args = args.map(arg => {
-                    if (parseInt(arg, 10).toString() === arg) {
-                        return parseInt(arg, 10);
-                    } else {
-                        return arg;
-                    }
-                });
-                console.dir(await jsonRpcFetch(...args), {depth: Infinity});
+                console.log(rl);
+                console.error('Unknown command. Use `help` command for usage instructions.');
                 return;
             }
 
