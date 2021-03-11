@@ -671,70 +671,70 @@ async function action(args, rl) {
             console.log(JSON.stringify(await jsonRpcFetch('mempoolContent', includeTransactions)));
             return;
         }
-        case 'consensus.min_fee_per_byte': {
-            console.log(await jsonRpcFetch('minFeePerByte', args[1]));
-            return;
-        }
-        case 'constant': {
-            if (args.length < 2) {
-                console.error('Specify constant name');
-                return;
-            }
-            console.log(await jsonRpcFetch('constant', args[1], args.length === 3 ? args[2] : undefined));
-            return;
-        }
-        case 'peers': {
-            const peerList = (await jsonRpcFetch('peerList')).sort((a, b) => a.addressState === 2 ? -1 : b.addressState === 2 ? 1 : a.addressState < b.addressState ? 1 : a.addressState > b.addressState ? -1 : a.address > b.address);
-            const maxAddrLength = peerList.map(p => p.address.length).reduce((a, b) => Math.max(a, b), 0);
-            if (!rl) {
-                await displayInfoHeader(maxAddrLength + 15);
-            }
-            for (const peer of peerList) {
-                const space = Array(maxAddrLength - peer.address.length + 1).join(' ');
-                console.log(chalk`${peer.address}${space} | ${peer.connectionState ? peerConnectionStateName(peer.connectionState) : peerAddressStateName(peer.addressState)}`);
-            }
-            return;
-        }
-        case 'peers.raw': {
-            console.dir(await jsonRpcFetch('peerList'));
-            return;
-        }
-        case 'peers.json': {
-            console.log(JSON.stringify(await jsonRpcFetch('peerList')));
-            return;
-        }
-        case 'peer': {
-            if (rl && !args[1]) {
-                // Ask for options
-                args[1] = await new Promise(resolve => { rl.question('Peer URI? ', resolve); });
-            }
-            if (args.length < 2) {
-                console.error('Specify peer URI');
-                return;
-            }
-            const peerState = await jsonRpcFetch('peerState', args[1], args.length > 2 ? args[2] : undefined);
-            if (!rl) {
-                await displayInfoHeader((peerState ? peerState.address.length : 0) + 20);
-            }
-            displayPeerState(peerState, args[1]);
-            return;
-        }
-        case 'peer.raw': {
-            if (args.length < 2) {
-                console.error('Specify peer URI');
-                return;
-            }
-            console.dir(await jsonRpcFetch('peerState', args[1], args.length > 2 ? args[2] : undefined));
-            return;
-        }
-        case 'peer.json': {
-            if (args.length < 2) {
-                console.error('Specify peer URI');
-                return;
-            }
-            console.log(JSON.stringify(await jsonRpcFetch('peerState', args[1], args.length > 2 ? args[2] : undefined)));
-            return;
-        }
+        // case 'consensus.min_fee_per_byte': {
+        //     console.log(await jsonRpcFetch('minFeePerByte', args[1]));
+        //     return;
+        // }
+        // case 'constant': {
+        //     if (args.length < 2) {
+        //         console.error('Specify constant name');
+        //         return;
+        //     }
+        //     console.log(await jsonRpcFetch('constant', args[1], args.length === 3 ? args[2] : undefined));
+        //     return;
+        // }
+        // case 'peers': {
+        //     const peerList = (await jsonRpcFetch('peerList')).sort((a, b) => a.addressState === 2 ? -1 : b.addressState === 2 ? 1 : a.addressState < b.addressState ? 1 : a.addressState > b.addressState ? -1 : a.address > b.address);
+        //     const maxAddrLength = peerList.map(p => p.address.length).reduce((a, b) => Math.max(a, b), 0);
+        //     if (!rl) {
+        //         await displayInfoHeader(maxAddrLength + 15);
+        //     }
+        //     for (const peer of peerList) {
+        //         const space = Array(maxAddrLength - peer.address.length + 1).join(' ');
+        //         console.log(chalk`${peer.address}${space} | ${peer.connectionState ? peerConnectionStateName(peer.connectionState) : peerAddressStateName(peer.addressState)}`);
+        //     }
+        //     return;
+        // }
+        // case 'peers.raw': {
+        //     console.dir(await jsonRpcFetch('peerList'));
+        //     return;
+        // }
+        // case 'peers.json': {
+        //     console.log(JSON.stringify(await jsonRpcFetch('peerList')));
+        //     return;
+        // }
+        // case 'peer': {
+        //     if (rl && !args[1]) {
+        //         // Ask for options
+        //         args[1] = await new Promise(resolve => { rl.question('Peer URI? ', resolve); });
+        //     }
+        //     if (args.length < 2) {
+        //         console.error('Specify peer URI');
+        //         return;
+        //     }
+        //     const peerState = await jsonRpcFetch('peerState', args[1], args.length > 2 ? args[2] : undefined);
+        //     if (!rl) {
+        //         await displayInfoHeader((peerState ? peerState.address.length : 0) + 20);
+        //     }
+        //     displayPeerState(peerState, args[1]);
+        //     return;
+        // }
+        // case 'peer.raw': {
+        //     if (args.length < 2) {
+        //         console.error('Specify peer URI');
+        //         return;
+        //     }
+        //     console.dir(await jsonRpcFetch('peerState', args[1], args.length > 2 ? args[2] : undefined));
+        //     return;
+        // }
+        // case 'peer.json': {
+        //     if (args.length < 2) {
+        //         console.error('Specify peer URI');
+        //         return;
+        //     }
+        //     console.log(JSON.stringify(await jsonRpcFetch('peerState', args[1], args.length > 2 ? args[2] : undefined)));
+        //     return;
+        // }
         // Staking
         case 'stakes': {
             if (!rl && !argv.silent) {
@@ -858,26 +858,26 @@ async function action(args, rl) {
             }
             return;
         }
-        case 'log': {
-            if (args.length < 2) {
-                args.push('verbose');
-            }
-            if (args.length < 3) {
-                args.splice(1, 0, '*');
-            }
-            if (args.length > 3) {
-                console.error('Too many args');
-                return;
-            }
-            // args[2] = Nimiq.Log.Level.toString(Nimiq.Log.Level.get(args[2]));
-            JSON.stringify(await jsonRpcFetch('log', args[1], args[2]));
-            if (args[1] === '*') {
-                console.log(`Global log level set to ${args[2]}`);
-            } else {
-                console.log(`Log level for tag ${args[1]} set to ${args[2]}`);
-            }
-            return;
-        }
+        // case 'log': {
+        //     if (args.length < 2) {
+        //         args.push('verbose');
+        //     }
+        //     if (args.length < 3) {
+        //         args.splice(1, 0, '*');
+        //     }
+        //     if (args.length > 3) {
+        //         console.error('Too many args');
+        //         return;
+        //     }
+        //     // args[2] = Nimiq.Log.Level.toString(Nimiq.Log.Level.get(args[2]));
+        //     JSON.stringify(await jsonRpcFetch('log', args[1], args[2]));
+        //     if (args[1] === '*') {
+        //         console.log(`Global log level set to ${args[2]}`);
+        //     } else {
+        //         console.log(`Log level for tag ${args[1]} set to ${args[2]}`);
+        //     }
+        //     return;
+        // }
         case 'help':
             console.log(`Actions:
     status                  Display the current status of the Nimiq node.
