@@ -64,7 +64,7 @@ function jsonRpcFetch(method, ...params) {
                     return param;
             }
         });
-        console.log('Params:', params);
+        // console.log('Params:', params);
         const body = JSON.stringify({
             jsonrpc: '2.0',
             id: 42,
@@ -410,11 +410,6 @@ async function action(args, rl) {
             console.log(JSON.stringify(accounts));
             return;
         }
-        case 'accounts.create': {
-            const account = await jsonRpcFetch('createAccount');
-            console.dir(account);
-            return;
-        }
         case 'account': {
             if (!rl && !argv.silent) {
                 await displayInfoHeader(81);
@@ -434,6 +429,31 @@ async function action(args, rl) {
             console.error('Specify account address');
             return;
         }
+        case 'account.import': {
+            if (args.length < 3) {
+                args[2] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); })) || null;
+            }
+            const account = await jsonRpcFetch('importRawKey', args[1], args[2]);
+            console.dir(account);
+            return;
+        }
+        case 'account.create': {
+            if (args.length < 2) {
+                args[1] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); })) || null;
+            }
+            const account = await jsonRpcFetch('createAccount', args[1]);
+            console.dir(account);
+            return;
+        }
+        case 'account.unlock': {
+            if (args.length < 2) {
+                args[1] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); })) || null;
+            }
+            const account = await jsonRpcFetch('unlockAccount', args[1]);
+            console.dir(account);
+            return;
+        }
+
         // Blocks
         case 'block': {
             if (!rl && !argv.silent) {
@@ -763,7 +783,11 @@ async function action(args, rl) {
             console.dir(await jsonRpcFetch('listStakes'), {depth: Infinity});
             return;
         }
-        case 'stake': {
+        case 'stakes.json': {
+            console.log(JSON.stringify(await jsonRpcFetch('listStakes'), {depth: Infinity}));
+            return;
+        }
+        case 'stakes.account': {
             if (!rl && !argv.silent) {
                 await displayInfoHeader(0);
             }
@@ -882,12 +906,16 @@ async function action(args, rl) {
             console.log(`Actions:
     status                  Display the current status of the Nimiq node.
     accounts                List local accounts.
-    accounts.create         Create a new Nimiq Account and store it in the
-                            WalletStore of the Nimiq node.
-    accounts.import PRIVATE_KEY
+    account ADDR            Display details for account with address ADDR.
+    account.import PRIVATE_KEY [PASSWORD]
                             Import a Nimiq Account from its private key and
                             store it in the WalletStore of the Nimiq node.
-    account ADDR            Display details for account with address ADDR.
+    account.create [PASSWORD]
+                            Create a new Nimiq Account and store it in the
+                            WalletStore of the Nimiq node.
+    account.unlock [PASSWORD]
+                            Unlock an account in the WalletStore of the
+                            Nimiq node.
     block BLOCK             Display details of block BLOCK.
     mempool                 Display mempool stats.
     mempool.content [INCLUDE_TX]
@@ -902,7 +930,7 @@ async function action(args, rl) {
                             connect, disconnect, ban, unban, fail
     stakes                  Display list of all validators, both active and
                             inactive, and inactive stakes in the network.
-    stake ADDR              Display staking status of address ADDR.
+    stakes.account ADDR     Display staking status of address ADDR.
     transaction TX          Display details about transaction TX.
     transaction BLOCK IDX   Display details about transaction at index IDX in
                             block BLOCK.
