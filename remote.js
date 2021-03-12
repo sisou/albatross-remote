@@ -53,9 +53,9 @@ if (argv.user) {
 function jsonRpcFetch(method, ...params) {
     return new Promise((resolve, fail) => {
         while (params.length > 0 && typeof params[params.length - 1] === 'undefined') params.pop();
-        params = params.map((param) => {
+        params = params.map((param, index) => {
             switch (typeof param) {
-                case 'number': return param.toString();
+                case 'number': return method === 'blockByNumber' ? param.toString() : param;
                 case 'string':
                     if (param === 'true') return true;
                     if (param === 'false') return false;
@@ -396,7 +396,8 @@ async function action(args, rl) {
             const accounts = addresses.map(address => ({ address }));
             accounts.sort((a, b) => a.address > b.address ? 1 : -1);
             for (const account of accounts) {
-                account.balance = await jsonRpcFetch('getBalance', account.address);
+                const raw = await jsonRpcFetch('getAccount', account.address);
+                account.balance = raw.Basic.balance;
                 console.log(`${account.address} | ${nimValueFormat(account.balance, 14)}`);
             }
             return;
@@ -405,7 +406,8 @@ async function action(args, rl) {
             const addresses = await jsonRpcFetch('listAccounts');
             const accounts = addresses.map(address => ({ address }));
             for (const account of accounts) {
-                account.balance = await jsonRpcFetch('getBalance', account.address);
+                const raw = await jsonRpcFetch('getAccount', account.address);
+                account.balance = raw.Basic.balance;
             }
             console.log(JSON.stringify(accounts));
             return;
@@ -430,26 +432,26 @@ async function action(args, rl) {
             return;
         }
         case 'account.import': {
-            if (args.length < 3) {
-                args[2] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); })) || null;
+            if (rl && !args[2]) {
+                args[2] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); }));
             }
-            const account = await jsonRpcFetch('importRawKey', args[1], args[2]);
+            const account = await jsonRpcFetch('importRawKey', args[1], args[2] || null);
             console.dir(account);
             return;
         }
         case 'account.create': {
-            if (args.length < 2) {
-                args[1] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); })) || null;
+            if (rl && !args[1]) {
+                args[1] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); }));
             }
-            const account = await jsonRpcFetch('createAccount', args[1]);
+            const account = await jsonRpcFetch('createAccount', args[1] || null);
             console.dir(account);
             return;
         }
         case 'account.unlock': {
-            if (args.length < 2) {
-                args[1] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); })) || null;
+            if (rl && !args[2]) {
+                args[2] = (await new Promise(resolve => { rl.question('Password? (none)', resolve); }));
             }
-            const account = await jsonRpcFetch('unlockAccount', args[1]);
+            const account = await jsonRpcFetch('unlockAccount', args[1], args[2] || null, /* duration */ null);
             console.dir(account);
             return;
         }
@@ -543,9 +545,9 @@ async function action(args, rl) {
             return;
         }
         case 'transaction.send': {
-            if (!rl && !argv.silent) {
-                await displayInfoHeader(74);
-            }
+            // if (!rl && !argv.silent) {
+            //     await displayInfoHeader(74);
+            // }
             if (rl && args.length === 1) {
                 // Ask for options
                 args[1] = await new Promise(resolve => { rl.question('From address? ', resolve); });
@@ -573,7 +575,7 @@ async function action(args, rl) {
                 answer = 'y';
             }
             if (answer.toLowerCase() === 'y') {
-                const hash = await jsonRpcFetch('sendTransaction', {from, to, value, fee, data});
+                const hash = await jsonRpcFetch('sendBasicTransaction', from, to, value, fee, '+0');
                 console.log(chalk`Sent as {bold ${hash}}.`);
             } else {
                 console.log(chalk`Transaction was {bold not} sent.`);
@@ -765,12 +767,12 @@ async function action(args, rl) {
             console.log(chalk`{bold Active Validators}`);
             stakes.activeValidators.sort((a, b) => a.rewardAddress > b.rewardAddress ? 1 : -1);
             for (const validator of stakes.activeValidators) {
-                console.log(`${validator.rewardAddress} | ${nimValueFormat(validator.balance, 14)} | ${Object.keys(validator.stakes).length} delegates`);
+                console.log(`${validator.id} | ${validator.rewardAddress} | ${nimValueFormat(validator.balance, 14)} | ${Object.keys(validator.stakes).length} delegates`);
             }
 
             console.log(chalk`{bold Inactive Validators}`);
             for (const { validator } of stakes.inactiveValidators) {
-                console.log(chalk`{gray ${validator.rewardAddress} | ${nimValueFormat(validator.balance, 14)} | ${Object.keys(validator.stakes).length} delegates}`);
+                console.log(chalk`{gray ${validator.id} | ${validator.rewardAddress} | ${nimValueFormat(validator.balance, 14)} | ${Object.keys(validator.stakes).length} delegates}`);
             }
 
             console.log(chalk`{bold Inactive Stakes}`);
@@ -862,6 +864,10 @@ async function action(args, rl) {
             if (inactiveStake) {
                 console.log(chalk`\n{gray Inactive Stake: ${nimValueFormat(inactiveStake.balance, 45)}}`);
             }
+            return;
+        }
+        case 'validator': {
+            console.error('Not implemented');
             return;
         }
         // Other
